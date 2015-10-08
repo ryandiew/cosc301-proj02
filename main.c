@@ -11,22 +11,108 @@
 #include <poll.h>
 #include <signal.h>
 
+
+/*
+
+
+
+typedef struct process {
+   struct process *next; // next process 
+   char **argv;
+   pid_t pid; // process ID
+   char completed; // sets to true if process completed 
+   char stopped; // true if process has stopped 
+   int status; // reported status value 
+}  process;
+   
+typedef struct job {
+   struct job *next; // next active job 
+   char *command; // command line 
+   process *first_process; // 1st process ID
+   char notified_stop; // true if user notified about stopped job
+   struct termios tmodes;
+   int stdin, stdout, stderr; // i/o channels 
+} job;
+
+
+job *first_job = NULL; // This is its head of active jobs list 
+
+/* Find the active job with the indicated pgid.  
+job *
+find_job (pid_t pgid)
+{
+  job *j;
+
+  for (j = first_job; j; j = j->next)
+    if (j->pgid == pgid)
+      return j;
+  return NULL;
+}
+/* Return true if all processes in the job have stopped or completed.  
+int
+job_is_stopped (job *j)
+{
+  process *p;
+
+  for (p = j->first_process; p; p = p->next)
+    if (!p->completed && !p->stopped)
+      return 0;
+  return 1;
+}
+/* Return true if all processes in the job have completed.  
+int
+job_is_completed (job *j)
+{
+  process *p;
+
+  for (p = j->first_process; p; p = p->next){
+    if (!p->completed){
+      return 0;
+    }
+  }
+  return 1;
+}
+
+
+
+
+
+
+
+/*int main(int argc, char **argv) {
+    cmd_loop(); // runs command loop 
+    
+    
+    return 0;
+}*/
+
+
 /*
   Function Declarations for builtin shell commands:
  */
-int shell_exit(char **args); // inits exit command 
 
 
-char *exit_str[] = {
-  "exit" // gets built in exit string
+int lsh_cd(char **args);
+int lsh_help(char **args);
+int lsh_exit(char **args);
+
+/*
+  List of builtin commands, followed by their corresponding functions.
+ */
+char *builtin_str[] = {
+  "cd",
+  "help",
+  "exit"
 };
 
-int (*exit_func[]) (char **) = {
-  &shell_exit
+int (*builtin_func[]) (char **) = {
+  &lsh_cd,
+  &lsh_help,
+  &lsh_exit
 };
 
-int shell_num_builtins() {
-  return sizeof(exit_str) / sizeof(char *);
+int lsh_num_builtins() {
+  return sizeof(builtin_str) / sizeof(char *);
 }
 
 /*
@@ -93,7 +179,7 @@ int lsh_launch(char **args)
   pid = fork();
   if (pid == 0) {
     // Child process
-    if (execvp(args[0], args) == -1) {
+    if (execv(args[0], args) == -1) {
       perror("lsh");
     }
     exit(EXIT_FAILURE);
@@ -124,11 +210,14 @@ int lsh_execute(char **args)
     return 1;
   }
 
-  for (i = 0; i < lsh_num_builtins(); i++) {
-    if (strcmp(args[0], builtin_str[i]) == 0) {
-      return (*builtin_func[i])(args);
-    }
-  }
+  int length = strlen(*args);
+  for(int j = 0; j < length; j++){
+     for (i = 0; i < lsh_num_builtins(); i++) {
+       if (strcmp(args[j], builtin_str[i]) == 0) {
+         return (*builtin_func[i])(args[j]);
+       }
+     }
+   }
 
   return lsh_launch(args);
 }
@@ -155,10 +244,11 @@ char *lsh_read_line(void)
     c = getchar();
 
     // If we hit EOF, replace it with a null character and return.
-    if (c == EOF || c == '\n') {
+    if (c == EOF || c == '\n' || c == '#') {
       buffer[position] = '\0';
       return buffer;
-    } else {
+    }
+    else {
       buffer[position] = c;
     }
     position++;
@@ -182,7 +272,7 @@ char *lsh_read_line(void)
    @param line The line.
    @return Null-terminated array of tokens.
  */
- 
+
 char **tokenify(char *s) {
    char *newS = strdup(s);
    int count = 0; 
@@ -203,13 +293,14 @@ char **tokenify(char *s) {
 	}
 	free(newS);
 	arr[i] = NULL;
-        printf(arr[0]);
-        printf(arr[1]);
+        //printf(arr[0]);
+        //printf(arr[1]);
 	return arr;	
 
 }
 
-char **lsh_split_line(char *line)
+
+/*char **lsh_split_line(char *line)
 {
   int bufsize = LSH_TOK_BUFSIZE, position = 0;
   char **tokens = malloc(bufsize * sizeof(char*));
@@ -222,6 +313,8 @@ char **lsh_split_line(char *line)
 
   token = strtok(line, LSH_TOK_DELIM);
   while (token != NULL) {
+    //printf("%s\n", token);
+  
     tokens[position] = token;
     position++;
 
@@ -240,7 +333,7 @@ char **lsh_split_line(char *line)
   }
   tokens[position] = NULL;
   return tokens;
-}
+} */
 
 /**
    @brief Loop getting input and executing it.
@@ -254,7 +347,8 @@ void lsh_loop(void)
   do {
     printf("> ");
     line = lsh_read_line();
-    args = lsh_split_line(line);
+    args = tokenify(line);
+    for(int i = 0; 
     status = lsh_execute(args);
 
     free(line);
@@ -279,119 +373,3 @@ int main(int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
-
-
-/*int main(int argc, char **argv) {
-	
-	loop(); 
-    return 0;
-}
-
-void loop(void) {
-	char *line; 
-	char **arguments;
-	int isdone; 
-	do{
-		printf(">");
-		line = readlin(); 
-		arguments = tokenify(line);
-		status = 0; 
-		
-	}while (isdone)
-}
-
-char read_line(void){
-	char *line = NULL; 
-	ssize_t bufsize = 0; 
-	getline(&line, &bufsize, stdin);
-	return line; 
-}
-
-char** tokenify(const char *s) {
-    
-	char *newS = strdup(s);
-	int count = 0; 
-	const char *whitespace = " \t\n";
-	char *token;
-	for(token = strtok(newS, whitespace); token!=NULL; token=strtok(NULL,whitespace)) {
-		
-		count++;
-				
-	}  
-	free(newS);
-	newS = strdup(s);
-	char **arr = malloc(sizeof(char *)*(count+1));
-	int i = 0;
-	for(token = strtok(newS, whitespace); token!=NULL; token=strtok(NULL,whitespace))
-	{	
-		arr[i] = strdup(token);
-		i++;
-	}
-	free(newS);
-	arr[i] = NULL;
-	return arr;
-}
-
-/*
-
-typedef struct process {
-   struct process *next; // next process 
-   char **argv;
-   pid_t pid; // process ID
-   char completed; // sets to true if process completed 
-   char stopped; // true if process has stopped 
-   int status; // reported status value 
-}  process;
-   
-typedef struct job {
-   struct job *next; // next active job 
-   char *command; // command line 
-   process *first_process; // 1st process ID
-   char notified_stop; // true if user notified about stopped job
-   struct termios tmodes;
-   int stdin, stdout, stderr; // i/o channels 
-} job;
-
-
-job *first_job = NULL; // This is its head of active jobs list */ 
-
-/* Find the active job with the indicated pgid.  */ 
-/*job *find_job (pid_t pgid)
-{
-  job *j;
-
-  for (j = first_job; j; j = j->next)
-    if (j->pgid == pgid)
-      return j;
-  return NULL;
-} */
-/* Return true if all processes in the job have stopped or completed.  */
-/*
-int job_is_stopped (job *j)
-{
-  process *p;
-
-  for (p = j->first_process; p; p = p->next)
-    if (!p->completed && !p->stopped)
-      return 0;
-  return 1;
-} */
-/* Return true if all processes in the job have completed.  */
-
-/*
-int job_is_completed (job *j)
-{
-  process *p;
-
-  for (p = j->first_process; p; p = p->next)
-    if (!p->completed)
-      return 0;
-  return 1;
-}
-*/
-/*int main(int argc, char **argv) {
-    cmd_loop(); // runs command loop 
-    
-    
-    return 0;
-}*/
