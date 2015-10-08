@@ -182,6 +182,33 @@ char *lsh_read_line(void)
    @param line The line.
    @return Null-terminated array of tokens.
  */
+ 
+char **tokenify(char *s) {
+   char *newS = strdup(s);
+   int count = 0; 
+   const char *whitespace = " ;\t\n";
+   char *token;
+   for(token = strtok(newS, whitespace); token!=NULL; token=strtok(NULL,whitespace)) {
+     count++;			
+   }  
+	free(newS);
+	newS = strdup(s);
+	char **arr = malloc(sizeof(char *)*(count+1));
+	int i = 0;
+	for(token = strtok(newS, whitespace); token!=NULL; token=strtok(NULL,whitespace))
+	{	
+		arr[i] = strdup(token);
+		//printf("%s\n",arr[i]);
+		i++;
+	}
+	free(newS);
+	arr[i] = NULL;
+        printf(arr[0]);
+        printf(arr[1]);
+	return arr;	
+
+}
+
 char **lsh_split_line(char *line)
 {
   int bufsize = LSH_TOK_BUFSIZE, position = 0;
